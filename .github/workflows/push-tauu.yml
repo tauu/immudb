@@ -1,0 +1,51 @@
+name: Docker Multi-Arch Build and Push
+
+on:
+  # Triggers the workflow pushing to any branch with the suffix 'userdb'.
+  push:
+    branches:
+      - "*.*.*-userdb"
+
+jobs:
+  buildx:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⚙️ Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔒 Login to Docker Hub
+        # Requires DOCKER_USERNAME and DOCKER_TOKEN (Personal Access Token) set as GitHub Secrets
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 💡 Set up QEMU
+        # Required for cross-platform building on a single runner
+        uses: docker/setup-qemu-action@v3
+
+      - name: 🏗️ Set up Docker Buildx
+        # Sets up the BuildKit builder that supports multi-arch builds
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🏷️ Set up Docker Metadata
+        # Extracts useful metadata (tags, labels) from the git context
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/immudb # Replace with your Docker Hub username and image name
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+
+      - name: 🔨 Build and Push Multi-Arch Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: . # Path to the build context (where your Dockerfile is)
+          file: ./build/Dockerfile.full # Path to your Dockerfile
+          platforms: linux/amd64,linux/arm64 # Target architectures
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
